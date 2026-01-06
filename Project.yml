@@ -1,0 +1,96 @@
+- name: creating the project based on Docker and Ansible
+  hosts: Node-1
+  become: yes
+
+  tasks:
+
+    - name: install docker and pip
+      yum:
+        name:
+          - docker
+          - python3-pip
+        state: latest
+
+    - name: install docker sdk for python
+      pip:
+        name: docker
+        extra_args: "--no-deps"
+
+    - name: start and enable docker service
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: add user to docker group
+      user:
+        name: yoo
+        groups: docker
+        append: yes
+
+    - name: create docker network for web apps
+      docker_network:
+        name: webnet
+
+    - name: create directories for websites
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - /opt/code-1
+        - /opt/code-2
+
+    - name: copy website-1 code
+      copy:
+        src: /home/yoo/ansible/code/code-1/
+        dest: /opt/code-1/
+
+    - name: copy website-2 code
+      copy:
+        src: /home/yoo/ansible/code/code-2/
+        dest: /opt/code-2/
+
+    - name: run container for application-1
+      docker_container:
+        name: web-1
+        image: nginx
+        state: started
+        restart_policy: always
+        networks:
+          - name: webnet
+        ports:
+          - "8080:80"
+        volumes:
+          - /opt/code-1:/usr/share/nginx/html
+
+    - name: run container for application-2
+      docker_container:
+        name: web-2
+        image: nginx
+        state: started
+        restart_policy: always
+        networks:
+          - name: webnet
+        ports:
+          - "8081:80"
+        volumes:
+          - /opt/code-2:/usr/share/nginx/html
+
+    - name: copy haproxy configuration
+      copy:
+        src: /home/yoo/ansible/haproxy.cfg
+        dest: /opt/haproxy.cfg
+
+    - name: run haproxy container
+      docker_container:
+        name: haproxy
+        image: haproxy
+        state: started
+        restart_policy: always
+        networks:
+          - name: webnet
+        ports:
+          - "80:80"
+        volumes:
+          - /opt/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg
